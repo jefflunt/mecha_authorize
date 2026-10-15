@@ -1,17 +1,13 @@
 ---
 okf_version: "0.2"
-type: Knowledge Index
-title: MechaAuthorize — Closed-by-Default Route Authorization & Auditing for Rails
-verified: machine-confirmed
-last_modified: "2026-10-15"
 ---
 
-# MechaAuthorize Knowledge Base (`.okf`)
+# Overview
 
-Welcome to the **MechaAuthorize** Open Knowledge Format (`.okf`) catalog. `mecha_authorize` provides a YAML-driven, closed-by-default route authorization system for Ruby on Rails applications, pairing a central route permission registry with static route parity auditing and behavioral persona matrix probing.
+* [MechaAuthorize Overview](overview.md) - Mission, directory layout, public API, and three-pillar route authorization model for Ruby on Rails.
 
-## Knowledge Documents
+# Architecture
 
-* [Overview & Quick Reference](README.md) — Gem purpose, directory layout, public API, and session history.
-* [Architecture & Three-Pillar Verification](architecture/index.md) — Deep dive into the central route matcher, controller gate, static route & engine auditor, and behavioral persona prober.
-* [Update Log](log.md) — Chronological record of architectural decisions and releases.
+* [Architecture](architecture/) - Deep dives into the YAML route matcher, runtime controller gate, static route auditor, and behavioral persona prober.
+* [Route Matcher & Runtime Controller Gate](architecture/route-matcher-and-controller.md) - YAML schema validation, route matching precedence, role resolution, and HTTP 251 probe short-circuiting.
+* [Static Route Auditor & Behavioral Persona Prober](architecture/static-auditor-and-behavioral-prober.md) - Static route parity verification, mounted engine bypass detection, and parallel Minitest persona probing.
