@@ -40,7 +40,7 @@ It implements the three-pillar **MechaRuby** verification model:
 | Path | Component | Responsibility |
 |------|-----------|----------------|
 | `lib/mecha_authorize.rb` | `MechaAuthorize` | Top-level singleton configuration (`configure`, `matcher`, `reload!`, `reset_configuration!`).[^entrypoint] |
-| `lib/mecha_authorize/version.rb` | `MechaAuthorize::VERSION` | Gem semantic version (`0.1.0`). |
+| `lib/mecha_authorize/version.rb` | `MechaAuthorize::VERSION` | Gem semantic version (`0.1.1`). |
 | `lib/mecha_authorize/configuration.rb` | `MechaAuthorize::Configuration` | Stores `config_path`, `probe_header`, `probe_status`, `debug_colorization`, `on_unauthorized`, role resolvers, and test matrix callbacks. |
 | `lib/mecha_authorize/matcher.rb` | `MechaAuthorize::Matcher` | Validates `mecha_authorize.yml` and resolves `(verb, path, route_uri_pattern)` to role permission hashes. |
 | `lib/mecha_authorize/controller.rb` | `MechaAuthorize::Controller` | `ActiveSupport::Concern` registering `before_action :authorize_route!` and `HTTP 251` probe short-circuiting. |
