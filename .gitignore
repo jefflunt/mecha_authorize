@@ -1,0 +1,49 @@
+# Built gem packages and build artifacts
+*.gem
+*.rbc
+/.config
+/InstalledFiles
+/pkg/
+/tmp/
+
+# Bundler environments, version managers, and vendored dependencies
+/.bundle/
+/vendor/bundle/
+/lib/bundler/man/
+.ruby-version
+.ruby-gemset
+.rbenv-gemsets
+.rbenv-vars
+
+# Test coverage and documentation artifacts
+/coverage/
+/.resultset.json
+/doc/
+/.yardoc/
+/_yardoc/
+/spec/reports/
+/test/reports/
+
+# Ruby REPL and debugger history
+.byebug_history
+.irb_history
+.pry_history
+.rake_tasks~
+
+# Environment and local configuration files
+.env
+.env.*
+!.env.example
+
+# OS and editor temporary files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+*~
+*.swp
+*.swo
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
