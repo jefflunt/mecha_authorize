@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "tiny_color"
+require "active_support/core_ext/object/blank"
+require "active_support/core_ext/string/inflections"
 require_relative "../mecha_authorize"
 
 class String
@@ -14,7 +16,19 @@ class String
 end
 
 desc "Print all routes and their MechaAuthorize authorization controls"
-task mecha_authorize: :environment do
+task :mecha_authorize, [:role] => :environment do |_t, args|
+  role_arg = args[:role]&.to_s&.strip
+  matcher = MechaAuthorize.matcher
+  colors = MechaAuthorize.configuration.debug_colorization
+
+  if role_arg && !role_arg.empty?
+    unless matcher.valid_role?(role_arg)
+      valid_roles = (matcher.role_names + matcher.personas.keys).uniq.join(", ")
+      puts "ERROR: Role '#{role_arg}' does not exist in config/mecha_authorize.yml (valid roles: #{valid_roles})"
+      exit(1)
+    end
+  end
+
   routes = Rails.application.routes.routes.map { |r| ActionDispatch::Routing::RouteWrapper.new(r) }.reject(&:internal?)
 
   all_mapped_routes = []
@@ -29,16 +43,51 @@ task mecha_authorize: :environment do
       engine_routes.map { |er| ActionDispatch::Routing::RouteWrapper.new(er) }.reject(&:internal?).each do |er|
         full_path = "#{clean_mount}#{er.path}".sub("(.:format)", "")
         verb = er.verb.to_s.empty? ? "*" : er.verb.to_s.upcase
-        all_mapped_routes << { verb: verb, path: full_path }
+        target = if er.respond_to?(:controller) && er.controller.present? && er.action.present?
+          "#{er.controller.camelize}Controller##{er.action}"
+        end
+        all_mapped_routes << { verb: verb, path: full_path, target: target }
       end
     else
       verb = r.verb.to_s.empty? ? "*" : r.verb.to_s.upcase
-      all_mapped_routes << { verb: verb, path: r.path.sub("(.:format)", "") }
+      target = if r.respond_to?(:controller) && r.controller.present? && r.action.present?
+        "#{r.controller.camelize}Controller##{r.action}"
+      end
+      all_mapped_routes << { verb: verb, path: r.path.sub("(.:format)", ""), target: target }
     end
   end
 
-  matcher = MechaAuthorize.matcher
-  colors = MechaAuthorize.configuration.debug_colorization
+  if role_arg && !role_arg.empty?
+    role_sym = role_arg.to_sym
+    users = matcher.resolve_users_for_role(role_sym, MechaAuthorize.configuration.user_resolvers)
+
+    if users.empty?
+      puts "NO USERS FOUND IN ROLE '#{role_arg}'"
+    else
+      puts "Users in role '#{role_arg}' (#{users.size} found):"
+      users.each do |u|
+        puts "  - #{matcher.format_user_entry(u)}"
+      end
+    end
+
+    puts "\nRoutes authorized for '#{role_arg}':"
+    authorized_routes = all_mapped_routes.select do |r|
+      rule = matcher.match_route_spec(r[:verb], r[:path])
+      rule && rule[role_sym] == true
+    end
+
+    max_verb_len = [authorized_routes.map { |r| r[:verb].to_s.length }.max || 4, 4].max
+    max_path_len = [authorized_routes.map { |r| r[:path].to_s.length }.max || 11, 11].max
+
+    authorized_routes.each do |r|
+      if r[:target]
+        puts sprintf("  %-#{max_verb_len}s  %-#{max_path_len}s  => %s", r[:verb], r[:path], r[:target])
+      else
+        puts sprintf("  %-#{max_verb_len}s  %s", r[:verb], r[:path])
+      end
+    end
+    next
+  end
 
   colorize_char = ->(char, perm) {
     return char if char == "." && perm != :none

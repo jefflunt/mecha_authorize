@@ -36,6 +36,10 @@ debug_colorization:
   user_api: :light_cyan
   none: :dark_grey
 
+personas:
+  admin:
+    user_resolver: "User.admins"
+
 routes:
   - route_pattern: "/"
     verb: "GET"
@@ -110,6 +114,9 @@ end
 ```bash
 # Print all routes and their colorized authorization matrix
 bin/rails mecha_authorize
+
+# Print users assigned to a specific role and the routes authorized for that role
+bin/rails "mecha_authorize[admin]"
 
 # Statically audit routes for dead rules and mounted engine bypasses
 bin/rails mecha_authorize:verify:static
