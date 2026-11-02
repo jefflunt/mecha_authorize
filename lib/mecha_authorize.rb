@@ -3,6 +3,7 @@
 require_relative "mecha_authorize/version"
 require_relative "mecha_authorize/configuration"
 require_relative "mecha_authorize/matcher"
+require_relative "mecha_authorize/context"
 require_relative "mecha_authorize/controller"
 require_relative "mecha_authorize/auditor/static"
 require_relative "mecha_authorize/auditor/prober"
@@ -10,6 +11,10 @@ require_relative "mecha_authorize/railtie" if defined?(Rails::Railtie)
 
 module MechaAuthorize
   class << self
+    def context_for(target = nil, routes: nil)
+      Context.for_target(target, matcher: matcher, routes: routes)
+    end
+
     def configuration
       @configuration ||= Configuration.new
     end

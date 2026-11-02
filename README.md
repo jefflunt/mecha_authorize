@@ -119,6 +119,18 @@ bin/rails mecha_authorize:verify:behavioral
 
 # Run both static and behavioral verification
 bin/rails mecha_authorize:verify
+
+# Output structured JSON policy context for a controller/action or route (for AI agents & tooling)
+bin/rails "mecha_authorize:context[Admin::UsersController#destroy]"
+```
+
+You can also inspect authorization context programmatically on `MechaAuthorize` or any controller including `MechaAuthorize::Controller`:
+
+```ruby
+MechaAuthorize.context_for("Admin::UsersController#destroy")
+# => { controller: "Admin::UsersController", action: "destroy", route: "/admin/users/:id", verb: "DELETE", required_persona: :admin, allowed_personas: [:admin], public: false, status: :authorized, permissions: {...} }
+
+Admin::UsersController.mecha_context(:destroy)
 ```
 
 ### 4. Dynamic Parallel Matrix Testing in Consuming Apps

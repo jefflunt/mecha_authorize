@@ -157,4 +157,10 @@ namespace :mecha_authorize do
 
   desc "Run both static parity and behavioral persona verification"
   task verify: %w[verify:static verify:behavioral]
+
+  desc "Output structured JSON authorization context for AI agents and developer tooling"
+  task :context, [:target] => :environment do |_t, args|
+    require "json"
+    puts JSON.pretty_generate(MechaAuthorize.context_for(args[:target]))
+  end
 end

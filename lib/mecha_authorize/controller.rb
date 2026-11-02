@@ -26,6 +26,16 @@ module MechaAuthorize
       def authorization_routes=(routes)
         @authorization_routes = routes
       end
+
+      def mecha_context(action_name = nil, routes: nil)
+        target = action_name ? "#{name}##{action_name}" : name.to_s
+        MechaAuthorize.context_for(target, routes: routes)
+      end
+    end
+
+    def mecha_context(action_name = nil, routes: nil)
+      act = action_name || (respond_to?(:action_name) ? self.action_name : nil)
+      self.class.mecha_context(act, routes: routes)
     end
 
     private
