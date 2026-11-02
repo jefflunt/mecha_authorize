@@ -16,6 +16,7 @@ module MechaAuthorize
       @probe_header = "X-Mecha-Authorize-Probe"
       @probe_status = 251 # Special sentinel HTTP status (251 Verified)
       @roles = {}
+      @user_resolvers = {}
       @debug_colorization = {
         public: :green,
         admin: :light_red,
@@ -29,8 +30,18 @@ module MechaAuthorize
       @test_teardown = nil
     end
 
-    def define_role(name, &block)
-      @roles[name.to_sym] = block
+    def define_role(name, user_resolver: nil, &block)
+      role_sym = name.to_sym
+      @roles[role_sym] = block
+      @user_resolvers[role_sym] = user_resolver if user_resolver
+    end
+
+    def define_user_resolver(name, resolver = nil, &block)
+      @user_resolvers[name.to_sym] = resolver || block
+    end
+
+    def user_resolvers
+      @user_resolvers
     end
 
     def roles

@@ -137,4 +137,146 @@ class MechaAuthorizeTest < Minitest::Test
     assert_equal "/auth/google_oauth2/callback", prober.substitute_params("/auth/:provider/callback")
     assert_equal "/custom/1/items", prober.substitute_params("/custom/:custom_param/items")
   end
+
+  def test_mecha_authorize_role_user_listing_and_validation
+    require "rake"
+    Rake::Task.clear
+    Rake::Task.define_task(:environment)
+    load File.expand_path("../lib/tasks/mecha_authorize.rake", __dir__)
+
+    user_struct = Struct.new(:id, :email, keyword_init: true)
+    sample_users = [
+      user_struct.new(id: 1, email: "alice@example.com"),
+      user_struct.new(id: 4, email: "bob@example.com"),
+      user_struct.new(id: 12, email: "carol@example.com")
+    ]
+
+    Object.const_set(:FakeUserForRoleTest, Class.new do
+      define_singleton_method(:admins) { sample_users }
+      define_singleton_method(:none_scope) { [] }
+    end)
+
+    config_with_personas = @sample_config.merge(
+      "personas" => {
+        "admin" => { "user_resolver" => "FakeUserForRoleTest.admins" },
+        "user_ui" => { "user_resolver" => "FakeUserForRoleTest.none_scope" }
+      }
+    )
+
+    MechaAuthorize.configure do |config|
+      config.config_path = config_with_personas
+    end
+
+    fake_route_struct = Struct.new(:verb, :path, :controller, :action, :internal, :engine, keyword_init: true) do
+      def internal?
+        !!internal
+      end
+
+      def engine?
+        !!engine
+      end
+    end
+
+    fake_routes = [
+      fake_route_struct.new(verb: "GET", path: "/home(.:format)", controller: "home", action: "index"),
+      fake_route_struct.new(verb: "POST", path: "/admin/users/:id/suspend(.:format)", controller: "admin/users", action: "suspend"),
+      fake_route_struct.new(verb: "GET", path: "/", controller: "public", action: "index")
+    ]
+
+    had_rails = Object.const_defined?(:Rails)
+    orig_rails = Object.const_get(:Rails) if had_rails
+    had_ad = Object.const_defined?(:ActionDispatch)
+    orig_ad = Object.const_get(:ActionDispatch) if had_ad
+
+    begin
+      routes_holder = Struct.new(:routes)
+      fake_rails = Module.new do
+        define_singleton_method(:application) do
+          route_set = routes_holder.new(fake_routes)
+          routes_holder.new(route_set)
+        end
+      end
+      Object.send(:remove_const, :Rails) if had_rails
+      Object.const_set(:Rails, fake_rails)
+
+      fake_ad = Module.new do
+        routing = Module.new do
+          wrapper = Class.new do
+            def initialize(r)
+              @r = r
+            end
+
+            def internal?
+              @r.internal?
+            end
+
+            def engine?
+              @r.engine?
+            end
+
+            def verb
+              @r.verb
+            end
+
+            def path
+              @r.path
+            end
+
+            def controller
+              @r.controller
+            end
+
+            def action
+              @r.action
+            end
+          end
+          const_set(:RouteWrapper, wrapper)
+        end
+        const_set(:Routing, routing)
+      end
+      Object.send(:remove_const, :ActionDispatch) if had_ad
+      Object.const_set(:ActionDispatch, fake_ad)
+
+      # 1. Valid role with users prints users and routes authorized for that role
+      out, _err = capture_io do
+        Rake::Task["mecha_authorize"].reenable
+        Rake::Task["mecha_authorize"].invoke("admin")
+      end
+
+      assert_includes out, "Users in role 'admin' (3 found):"
+      assert_includes out, "- alice@example.com (ID: 1)"
+      assert_includes out, "- bob@example.com (ID: 4)"
+      assert_includes out, "- carol@example.com (ID: 12)"
+      assert_includes out, "Routes authorized for 'admin':"
+      assert_includes out, "/admin/users/:id/suspend"
+      assert_includes out, "=> Admin::UsersController#suspend"
+      assert_includes out, "/home"
+      refute_includes out, "PublicController#index"
+
+      # 2. Valid role with 0 users prints NO USERS FOUND notice
+      out, _err = capture_io do
+        Rake::Task["mecha_authorize"].reenable
+        Rake::Task["mecha_authorize"].invoke("user_ui")
+      end
+      assert_includes out, "NO USERS FOUND IN ROLE 'user_ui'"
+      assert_includes out, "Routes authorized for 'user_ui':"
+
+      # 3. Unknown role prints error and exits non-zero
+      err = nil
+      out, _err = capture_io do
+        Rake::Task["mecha_authorize"].reenable
+        err = assert_raises(SystemExit) do
+          Rake::Task["mecha_authorize"].invoke("superadmin")
+        end
+      end
+      assert_equal 1, err.status
+      assert_includes out, "does not exist in config/mecha_authorize.yml"
+    ensure
+      Object.send(:remove_const, :FakeUserForRoleTest) if Object.const_defined?(:FakeUserForRoleTest)
+      Object.send(:remove_const, :Rails) if Object.const_defined?(:Rails)
+      Object.const_set(:Rails, orig_rails) if had_rails
+      Object.send(:remove_const, :ActionDispatch) if Object.const_defined?(:ActionDispatch)
+      Object.const_set(:ActionDispatch, orig_ad) if had_ad
+    end
+  end
 end

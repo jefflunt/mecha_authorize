@@ -6,14 +6,15 @@ module MechaAuthorize
   class Matcher
     VALID_VERBS = %w[GET POST PUT PATCH DELETE HEAD OPTIONS *].freeze
 
-    attr_reader :routes, :indexed_routes, :wildcard_routes, :colorization
+    attr_reader :routes, :indexed_routes, :wildcard_routes, :colorization, :personas, :role_names
 
-    def initialize(config_path_or_hash = nil, role_names = %i[public admin user_ui user_api])
-      @role_names = role_names.map(&:to_sym)
+    def initialize(config_path_or_hash = nil, role_names = nil)
+      @role_names = (role_names.nil? || role_names.empty? ? %i[public admin user_ui user_api] : role_names).map(&:to_sym)
       @indexed_routes = {}
       @wildcard_routes = []
       @raw_routes = []
       @colorization = {}
+      @personas = {}
 
       if config_path_or_hash.is_a?(Hash)
         load_from_hash(config_path_or_hash)
@@ -52,9 +53,53 @@ module MechaAuthorize
         @colorization = data["debug_colorization"].transform_keys(&:to_sym).transform_values { |v| v.to_s.sub(/^:/, "").to_sym }
       end
 
+      @personas = parse_personas(data["personas"]) if data["personas"].is_a?(Hash)
+
       @indexed_routes.freeze
       @wildcard_routes.freeze
+      @personas.freeze
       self
+    end
+
+    def valid_role?(role_name)
+      return false if role_name.nil? || role_name.to_s.strip.empty?
+
+      sym = role_name.to_s.strip.to_sym
+      @role_names.include?(sym) || @personas.key?(sym)
+    end
+
+    def resolve_users_for_role(role_name, custom_resolvers = {})
+      sym = role_name.to_s.strip.to_sym
+      resolver = custom_resolvers[sym] || @personas.dig(sym, :user_resolver)
+      return [] if resolver.nil?
+
+      if resolver.respond_to?(:call)
+        Array(resolver.call)
+      elsif resolver.is_a?(String)
+        evaluate_user_resolver_string(resolver)
+      else
+        []
+      end
+    end
+
+    def format_user_entry(user)
+      label = if user.respond_to?(:email) && user.email.present?
+        user.email
+      elsif user.respond_to?(:email_address) && user.email_address.present?
+        user.email_address
+      elsif user.respond_to?(:username) && user.username.present?
+        user.username
+      elsif user.respond_to?(:name) && user.name.present?
+        user.name
+      else
+        user.to_s
+      end
+
+      if user.respond_to?(:id) && !user.id.nil?
+        "#{label} (ID: #{user.id})"
+      else
+        label.to_s
+      end
     end
 
     # Match incoming request by HTTP verb and path
@@ -228,6 +273,35 @@ module MechaAuthorize
         return rule if regex.match?(path)
       end
       nil
+    end
+
+    def parse_personas(raw_personas)
+      raw_personas.each_with_object({}) do |(role_key, cfg), h|
+        sym = role_key.to_s.strip.to_sym
+        if cfg.is_a?(Hash)
+          h[sym] = {
+            user_resolver: cfg["user_resolver"] || cfg[:user_resolver]
+          }.freeze
+        elsif cfg.is_a?(String)
+          h[sym] = { user_resolver: cfg.strip }.freeze
+        end
+      end
+    end
+
+    def evaluate_user_resolver_string(expr)
+      cleaned = expr.to_s.strip
+      raise "Empty user_resolver expression" if cleaned.empty?
+
+      parts = cleaned.split(".")
+      const_name = parts.shift
+      klass = Object.const_get(const_name)
+
+      result = parts.reduce(klass) do |receiver, method_call|
+        raise "Invalid method call '#{method_call}' in user_resolver '#{expr}'" unless method_call.match?(/\A[a-zA-Z_][a-zA-Z0-9_?!]*\z/)
+        receiver.public_send(method_call)
+      end
+
+      result.respond_to?(:to_a) ? result.to_a : Array(result)
     end
   end
 end
