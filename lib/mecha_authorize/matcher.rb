@@ -9,7 +9,7 @@ module MechaAuthorize
     attr_reader :routes, :indexed_routes, :wildcard_routes, :colorization
 
     def initialize(config_path_or_hash = nil, role_names = %i[public admin user_ui user_api])
-      @role_names = role_names.map(&:to_sym)
+      @role_names = (role_names.nil? || role_names.empty? ? %i[public admin user_ui user_api] : role_names).map(&:to_sym)
       @indexed_routes = {}
       @wildcard_routes = []
       @raw_routes = []

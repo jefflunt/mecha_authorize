@@ -137,4 +137,67 @@ class MechaAuthorizeTest < Minitest::Test
     assert_equal "/auth/google_oauth2/callback", prober.substitute_params("/auth/:provider/callback")
     assert_equal "/custom/1/items", prober.substitute_params("/custom/:custom_param/items")
   end
+
+  def test_context_for_and_controller_mecha_context_hook
+    MechaAuthorize.configure do |config|
+      config.config_path = @sample_config
+      config.define_role(:public) { true }
+      config.define_role(:admin) { |u, _r| u == :admin }
+      config.define_role(:user_ui) { |u, _r| u == :ui }
+      config.define_role(:user_api) { |u, _r| u == :api }
+    end
+
+    sample_routes = [
+      { verb: "GET", path: "/", controller: "PublicController", action: "index" },
+      { verb: "GET", path: "/home", controller: "HomeController", action: "index" },
+      { verb: "DELETE", path: "/admin/users/:id", controller: "Admin::UsersController", action: "destroy" },
+      { verb: "GET", path: "/unmapped/secret", controller: "SecretsController", action: "show" }
+    ]
+
+    # 1. Controller#action introspection
+    destroy_ctx = MechaAuthorize.context_for("Admin::UsersController#destroy", routes: sample_routes)
+    assert_equal :admin, destroy_ctx[:required_persona]
+    assert_equal [:admin], destroy_ctx[:allowed_personas]
+    assert_equal "/admin/users/:id", destroy_ctx[:route]
+    assert_equal "DELETE", destroy_ctx[:verb]
+    assert_equal :authorized, destroy_ctx[:status]
+    refute destroy_ctx[:public]
+
+    # 2. Public route introspection
+    root_ctx = MechaAuthorize.context_for("GET /", routes: sample_routes)
+    assert_equal :public, root_ctx[:required_persona]
+    assert_equal :public, root_ctx[:status]
+    assert root_ctx[:public]
+
+    # 3. Unmapped route fails closed (:denied_by_default)
+    unmapped_ctx = MechaAuthorize.context_for("SecretsController#show", routes: sample_routes)
+    assert_nil unmapped_ctx[:required_persona]
+    assert_empty unmapped_ctx[:allowed_personas]
+    assert_equal :denied_by_default, unmapped_ctx[:status]
+
+    # 4. Controller class & instance #mecha_context hook
+    dummy_ctrl_base = Class.new do
+      def self.before_action(*); end
+      include MechaAuthorize::Controller
+    end
+
+    admin_ctrl = Class.new(dummy_ctrl_base) do
+      def self.name
+        "Admin::UsersController"
+      end
+
+      attr_accessor :action_name
+    end
+
+    ctrl_ctx = admin_ctrl.mecha_context(nil, routes: sample_routes)
+    assert_equal "Admin::UsersController", ctrl_ctx[:controller]
+    assert ctrl_ctx[:closed_by_default]
+    assert_equal :admin, ctrl_ctx[:actions]["destroy"][:required_persona]
+
+    instance = admin_ctrl.new
+    instance.action_name = "destroy"
+    inst_ctx = instance.mecha_context(nil, routes: sample_routes)
+    assert_equal :admin, inst_ctx[:required_persona]
+    assert_equal "/admin/users/:id", inst_ctx[:route]
+  end
 end
